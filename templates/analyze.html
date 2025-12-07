@@ -1,0 +1,389 @@
+<!-- templates/analyze.html -->
+{% extends "base.html" %}
+
+{% block title %}Analyze Image - imglyser Pro{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Navbar (same as admin_dashboard.html) -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/admin">
+                <i class="bi bi-shield-check"></i> imglyser Pro
+            </a>
+            <!-- ... same navbar ... -->
+        </div>
+    </nav>
+
+    <div class="row">
+        <!-- Sidebar (same as admin_dashboard.html) -->
+        <div class="col-md-2 sidebar p-0">
+            <!-- ... same sidebar ... -->
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-10 p-4">
+            <div class="card">
+                <div class="card-header">
+                    <h4><i class="bi bi-upload"></i> Upload Image for Analysis</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <!-- Upload Form -->
+                            <form id="uploadForm" enctype="multipart/form-data">
+                                <div class="mb-3">
+                                    <label for="imageFile" class="form-label">Select Image</label>
+                                    <input class="form-control" type="file" id="imageFile" name="file" accept=".jpg,.jpeg,.png,.tiff,.bmp,.webp" required>
+                                    <div class="form-text">
+                                        Supported formats: JPG, PNG, TIFF, BMP, WEBP (Max 50MB)
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3 form-check">
+                                    <input type="checkbox" class="form-check-input" id="deepAnalysis" checked>
+                                    <label class="form-check-label" for="deepAnalysis">
+                                        Perform deep analysis (ELA, steganography, metadata)
+                                    </label>
+                                </div>
+                                
+                                <button type="submit" class="btn btn-primary" id="analyzeBtn">
+                                    <span id="btnText">Analyze Image</span>
+                                    <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+                                </button>
+                            </form>
+                            
+                            <!-- Progress Bar -->
+                            <div class="mt-4 d-none" id="progressContainer">
+                                <div class="progress" style="height: 20px;">
+                                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" style="width: 0%"></div>
+                                </div>
+                                <div class="mt-2 text-center">
+                                    <small id="progressText">Initializing analysis...</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <!-- Preview -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6><i class="bi bi-image"></i> Image Preview</h6>
+                                </div>
+                                <div class="card-body text-center">
+                                    <img id="imagePreview" src="" class="img-fluid rounded d-none" style="max-height: 300px;">
+                                    <div id="noPreview" class="text-muted">
+                                        <i class="bi bi-image display-1"></i>
+                                        <p class="mt-2">No image selected</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Results Section -->
+                    <div id="resultsSection" class="mt-4 d-none">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4><i class="bi bi-clipboard-data"></i> Analysis Results</h4>
+                            </div>
+                            <div class="card-body">
+                                <div id="resultsContent">
+                                    <!-- Results will be loaded here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Image preview
+document.getElementById('imageFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    const preview = document.getElementById('imagePreview');
+    const noPreview = document.getElementById('noPreview');
+    
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            preview.src = e.target.result;
+            preview.classList.remove('d-none');
+            noPreview.classList.add('d-none');
+        };
+        reader.readAsDataURL(file);
+    } else {
+        preview.src = '';
+        preview.classList.add('d-none');
+        noPreview.classList.remove('d-none');
+    }
+});
+
+// Form submission
+document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+    
+    const fileInput = document.getElementById('imageFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a file');
+        return;
+    }
+    
+    // Show progress
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const btnText = document.getElementById('btnText');
+    const btnSpinner = document.getElementById('btnSpinner');
+    
+    progressContainer.classList.remove('d-none');
+    analyzeBtn.disabled = true;
+    btnText.textContent = 'Analyzing...';
+    btnSpinner.classList.remove('d-none');
+    
+    // Simulate progress
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress += Math.random() * 10;
+        if (progress > 90) progress = 90;
+        progressBar.style.width = progress + '%';
+        progressText.textContent = getProgressText(progress);
+    }, 500);
+    
+    // Upload file
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const response = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        // Complete progress
+        clearInterval(progressInterval);
+        progressBar.style.width = '100%';
+        progressText.textContent = 'Analysis complete!';
+        
+        // Poll for results
+        await pollAnalysisResult(result.session_id);
+        
+    } catch (error) {
+        clearInterval(progressInterval);
+        progressBar.classList.remove('bg-primary');
+        progressBar.classList.add('bg-danger');
+        progressText.textContent = 'Analysis failed: ' + error.message;
+        console.error('Upload error:', error);
+    } finally {
+        analyzeBtn.disabled = false;
+        btnText.textContent = 'Analyze Image';
+        btnSpinner.classList.add('d-none');
+    }
+});
+
+function getProgressText(progress) {
+    if (progress < 30) return 'Uploading image...';
+    if (progress < 50) return 'Extracting metadata...';
+    if (progress < 70) return 'Performing ELA analysis...';
+    if (progress < 90) return 'Checking for steganography...';
+    return 'Finalizing results...';
+}
+
+async function pollAnalysisResult(sessionId) {
+    const token = localStorage.getItem('access_token');
+    let attempts = 0;
+    const maxAttempts = 30; // 30 seconds
+    
+    while (attempts < maxAttempts) {
+        try {
+            const response = await fetch(`/api/analysis/${sessionId}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                
+                if (result.status === 'completed') {
+                    displayResults(result);
+                    return;
+                } else if (result.status === 'failed') {
+                    throw new Error('Analysis failed');
+                }
+                // If still processing, continue polling
+            }
+        } catch (error) {
+            console.error('Polling error:', error);
+        }
+        
+        attempts++;
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+    }
+    
+    throw new Error('Analysis timeout');
+}
+
+function displayResults(result) {
+    const resultsSection = document.getElementById('resultsSection');
+    const resultsContent = document.getElementById('resultsContent');
+    
+    const findings = JSON.parse(result.findings);
+    
+    // Calculate risk level
+    const riskScore = findings.risk_score || 0;
+    let riskLevel = 'low';
+    let riskColor = 'success';
+    
+    if (riskScore > 70) {
+        riskLevel = 'high';
+        riskColor = 'danger';
+    } else if (riskScore > 30) {
+        riskLevel = 'medium';
+        riskColor = 'warning';
+    }
+    
+    // Create results HTML
+    resultsContent.innerHTML = `
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h6><i class="bi bi-info-circle"></i> Basic Info</h6>
+                        <table class="table table-sm">
+                            <tr><td>Filename:</td><td>${result.filename}</td></tr>
+                            <tr><td>File Hash:</td><td><code>${result.file_hash}</code></td></tr>
+                            <tr><td>File Size:</td><td>${(result.file_size / 1024 / 1024).toFixed(2)} MB</td></tr>
+                            <tr><td>Analysis Time:</td><td>${new Date(result.completed_at).toLocaleString()}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h6><i class="bi bi-shield-exclamation"></i> Risk Assessment</h6>
+                        <div class="text-center">
+                            <div class="display-4 text-${riskColor}">${riskScore}</div>
+                            <span class="badge bg-${riskColor}">${riskLevel.toUpperCase()} RISK</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h6><i class="bi bi-check-circle"></i> Summary</h6>
+                        <p>${findings.summary || 'No significant findings'}</p>
+                        ${findings.steganography.lsb_found ? 
+                            '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> LSB Steganography detected!</div>' : 
+                            '<div class="alert alert-success"><i class="bi bi-check-circle"></i> No steganography found</div>'}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="bi bi-list-check"></i> Metadata Analysis</h6>
+                    </div>
+                    <div class="card-body">
+                        <h6>EXIF Tags: ${Object.keys(findings.metadata.exif || {}).length} found</h6>
+                        <div class="table-responsive" style="max-height: 300px;">
+                            <table class="table table-sm">
+                                ${Object.entries(findings.metadata.exif || {}).slice(0, 10).map(([key, value]) => `
+                                    <tr><td><small>${key}</small></td><td><small>${value}</small></td></tr>
+                                `).join('')}
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6><i class="bi bi-image"></i> ELA Analysis</h6>
+                    </div>
+                    <div class="card-body text-center">
+                        ${result.ela_path ? `<img src="/${result.ela_path}" class="img-fluid" style="max-height: 200px;">` : 
+                        '<p class="text-muted">ELA not available</p>'}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-3">
+            <button class="btn btn-outline-primary" onclick="saveReport('${result.session_id}')">
+                <i class="bi bi-download"></i> Download Full Report
+            </button>
+            <button class="btn btn-outline-secondary" onclick="shareAnalysis('${result.session_id}')">
+                <i class="bi bi-share"></i> Share Analysis
+            </button>
+        </div>
+    `;
+    
+    resultsSection.classList.remove('d-none');
+}
+
+async function saveReport(sessionId) {
+    const token = localStorage.getItem('access_token');
+    const response = await fetch(`/api/analysis/${sessionId}/report`, {
+        headers: {
+            'Authorization': `Bearer ${token}`
+        }
+    });
+    
+    if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `imglyser_report_${sessionId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+}
+
+function shareAnalysis(sessionId) {
+    navigator.clipboard.writeText(`${window.location.origin}/analysis/${sessionId}`);
+    alert('Analysis link copied to clipboard!');
+}
+
+// Check authentication
+window.addEventListener('load', function() {
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login';
+    }
+});
+</script>
+{% endblock %}
